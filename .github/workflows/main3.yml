@@ -139,6 +139,7 @@ jobs:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         BOT_USERNAME: ${{ secrets.BOT_USERNAME }}
         MAN_BOT_ID: ${{ secrets.MAN_BOT_ID }}
+        SHOW_CAPTION: ${{ secrets.SHOW_CAPTION }}
       run: |
         python go3.py
 
