@@ -55,8 +55,13 @@ class lybot:
     def __init__(self,db):
         self.albums = defaultdict(list)
         self.album_tasks = {}
+
+        self.ads = defaultdict(list)
+        self.ad_tasks = {}
+
         self.setting = {}
         self.ALBUM_TIMEOUT = 0.5
+        self.AD_TIMEOUT = 300
         self.MAX_PROCESS_TIME = 2400
 
         class BaseModel(Model):
@@ -220,7 +225,7 @@ class lybot:
             components = data_part.split('§')
            
             if len(components) != 5:
-                raise ValueError("Invalid encoded string format.")
+                raise ValueError(f"Invalid encoded string format. len = {len(components)}")
 
             file_unique_id_enc, file_id_enc, bot_name_enc, sender_id_enc, tail = components
 
@@ -250,7 +255,8 @@ class lybot:
         # pattern = fr"^[pvdau]_didipanbot_[{allowed_chars}]*§[{allowed_chars}]*§[{allowed_chars}]*§[{allowed_chars}]*§$"
 
         # 构造正则表达式
-        pattern = r"^[pvdau]_didipanbot_[^\s]*§[^\s]*§[^\s]*§[^\s]*§$"
+        pattern = r"[pvdau]_didipanbot_[^\s§]+§[^\s§]+§[^\s§]+§[^\s§]+"
+        # pattern = r"^[pvdau]_didipanbot_[^\s]*§[^\s]*§[^\s]*§[^\s]*§$"
         matches = re.findall(pattern, text, re.IGNORECASE | re.MULTILINE)
         return matches
 
@@ -531,33 +537,50 @@ class lybot:
                 parse_mode="HTML"
             )
 
-            # 获取发送者的用户信息
-            user_first_name = ""
-            try:
-                user = await context.bot.get_chat(chat_id=sender_id)
-                user_first_name = user.first_name or "Anonymous"  # 默认值防止为空
-            except Exception as e:
-                self.logger.error(f"Failed to get user info: {e}")
 
-            # 发送奖励通知到中文群
-            try:
-                await context.bot.send_message(
-                    chat_id=-1002086803190,  # 中文群ID
-                    text=f"群友{user_first_name}分享了他的代码到<u>其他友群</u>，轻松领取了额外的五个珍贵资源！机会难得，你也赶快试试吧！",
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                self.logger.error(f"Failed to send message to Chinese group: {e}")
+            self.ads = defaultdict(list)
+            self.ad_tasks = {}
 
-            # 发送奖励通知到外文群
-            try:
-                await context.bot.send_message(
-                    chat_id=-1002138063591,  # 外文群ID
-                    text=f"Our group member, {user_first_name}, shared his code with <u>other groups</u> and easily earned five extra valuable resources! Don't miss out—give it a try now!",
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                self.logger.error(f"Failed to send message to English group: {e}")
+
+            # 添加消息到 Album
+            self.ads['referral_reward'].append({sender_id: sender_id})
+
+            # 如果已有任务，取消旧任务
+            if 'referral_reward' in self.ad_tasks:
+                self.ad_tasks['referral_reward'].cancel()
+
+            # 创建新的定时任务
+            self.ad_tasks['referral_reward'] = asyncio.create_task(self.handle_ad_message('referral_reward',context))
+
+
+
+            # # 获取发送者的用户信息
+            # user_first_name = ""
+            # try:
+            #     user = await context.bot.get_chat(chat_id=sender_id)
+            #     user_first_name = user.first_name or "Anonymous"  # 默认值防止为空
+            # except Exception as e:
+            #     self.logger.error(f"Failed to get user info: {e}")
+
+            # # 发送奖励通知到中文群
+            # try:
+            #     await context.bot.send_message(
+            #         chat_id=-1002086803190,  # 中文群ID
+            #         text=f"群友<code>{user_first_name}</code>分享了他的代码到<u>其他友群</u>，轻松领取了额外的五个珍贵资源！机会难得，你也赶快试试吧！",
+            #         parse_mode="HTML"
+            #     )
+            # except Exception as e:
+            #     self.logger.error(f"Failed to send message to Chinese group: {e}")
+
+            # # 发送奖励通知到外文群
+            # try:
+            #     await context.bot.send_message(
+            #         chat_id=-1002138063591,  # 外文群ID
+            #         text=f"Our group member, <code>{user_first_name}</code>, shared his code with <u>other groups</u> and easily earned five extra valuable resources! Don't miss out—give it a try now!",
+            #         parse_mode="HTML"
+            #     )
+            # except Exception as e:
+            #     self.logger.error(f"Failed to send message to English group: {e}")
 
             return
 
@@ -631,6 +654,52 @@ class lybot:
             )
         # await self.get_resource_from_code(update, decode_dict)
     
+    
+    async def handle_ad_message(self,action: str, context) -> None:
+        try:
+            await asyncio.sleep(self.AD_TIMEOUT)
+
+            # 处理 Album 完成逻辑
+            ad_set = self.ads.pop(action, [])
+            self.ad_tasks.pop(action, None)
+
+            sender_id = ad_set[0].sender_id
+
+            # 获取发送者的用户信息
+            user_first_name = ""
+            try:
+                user = await context.bot.get_chat(chat_id=sender_id)
+                user_first_name = user.first_name or "Anonymous"  # 默认值防止为空
+            except Exception as e:
+                self.logger.error(f"Failed to get user info: {e}")
+
+            # 发送奖励通知到中文群
+            try:
+                await context.bot.send_message(
+                    chat_id=-1002086803190,  # 中文群ID
+                    text=f"群友<code>{user_first_name}</code>分享了他的代码到<u>其他友群</u>，轻松领取了额外的五个珍贵资源！机会难得，你也赶快试试吧！",
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                self.logger.error(f"Failed to send message to Chinese group: {e}")
+
+            # 发送奖励通知到外文群
+            try:
+                await context.bot.send_message(
+                    chat_id=-1002138063591,  # 外文群ID
+                    text=f"Our group member, <code>{user_first_name}</code>, shared his code with <u>other groups</u> and easily earned five extra valuable resources! Don't miss out—give it a try now!",
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                self.logger.error(f"Failed to send message to English group: {e}")
+
+
+
+        except asyncio.CancelledError:
+            # 如果任务被取消，不做任何操作
+            self.logger.debug(f"AD 处理已取消")
+            pass
+    
     async def handle_album_completion(self,media_group_id: str, context) -> None:
         try:
             # 等待超时时间
@@ -665,7 +734,7 @@ class lybot:
             # 这里可以添加保存或处理 Album 的逻辑
         except asyncio.CancelledError:
             # 如果任务被取消，不做任何操作
-            self.logger.debug(f"Album {media_group_id} 处理超时，已取消")
+            self.logger.debug(f"Album {media_group_id} 处理已取消")
             
             pass
     
@@ -872,25 +941,20 @@ class lybot:
 
 
    
-# tgbot = JJLode()     
-# encode_text = tgbot.encode("AgADgwEAAorgCFY","BAACAgUAAxkBAAIJImR_62QHj9z8JBk9TfHEdzy9yx8hAAKDAQACiuAIVuRai5Vm89YVLwQ","test13182732bot","p","2312167403")
-# print(encode_text)
+# tgbot = lybot(None)     
+# # encode_text = tgbot.encode("AgADgwEAAorgCFY","BAACAgUAAxkBAAIJImR_62QHj9z8JBk9TfHEdzy9yx8hAAKDAQACiuAIVuRai5Vm89YVLwQ","test13182732bot","p","2312167403")
+# # print(encode_text)
 
-# decode_text = tgbot.decode(encode_text)
-# print(f"{decode_text}")
+# # decode_text = tgbot.decode(encode_text)
+# # print(f"{decode_text}")
 
 # # 测试案例：多行文字
 # test_text = """
-# p_didipanbot_abc§def§ghi§jkl§
-# v_didipanbot_test123§456§789§end§
-# D_didipanbot_A§B§C§D§
-# A_didipanbot_1§2§3§4§
-# x_didipanbot_abc§def§ghi§jkl§  # 不符合
-# p_didipanbot_abc§def§ghi§jkl
-# u_didipanbot_only_three§one§two§  # 不符合
-# p_didipanbot_1BRàD¶ãÅbUFÁÎ§2Úë4-otdC_ríÛÙí9íjeëà×ßÈqý©ÃaÉäÌïUfçÇýß¤0ê®üØÐ¡äè·£Ç¶7¾oæ¢H§5Á¨DuT¦¡ÆËUÚê§0§
-# p_didipanbot_2BRàD¶ãÅbUFÁÎ§2Úë4-otdC_ríÛÙí9íjeëà×ßÈqý©ÃaÉäÌïUfçÇýß¤0ê®üØÐ¡äè·£Ç¶7¾oæ¢H§5Á¨DuT¦¡ÆËUÚê§0§
+# a_didipanbot_2ßK¨wa°¢òäõÏbÆ§0§SMûeÈgÓbÛ¦§Ch¾¸Q§v_didipanbot_1BRßy¦I¯åf8²á§1LÌqãÖßãLJOc¥è®¬µqPéXp¥æÛç¾ôÎÖ¦k¥¸Ëû¦÷CëX¤ÄÐÖÒXÀHÊMåàkÚ-BDÛè§SMûeÈgÓbÛ¦§Ch¾¸Q§
 # """
 
-# decode_row = tgbot.find_encode_code(test_text)
+# endcode_row = tgbot.find_encode_code(test_text)
+# print(f"{endcode_row[0]}")
+
+# decode_row = tgbot.decode(endcode_row[0])
 # print(f"{decode_row}")
