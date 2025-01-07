@@ -57,7 +57,7 @@ class lybot:
         self.album_tasks = {}
         self.setting = {}
         self.ALBUM_TIMEOUT = 0.5
-        self.MAX_PROCESS_TIME = 1200
+        self.MAX_PROCESS_TIME = 2400
 
         class BaseModel(Model):
             class Meta:
@@ -400,7 +400,7 @@ class lybot:
                 parse_mode=ParseMode.HTML
             )
 
-            print(f"Reply message: {res.message_id}", flush=True)
+            # print(f"Reply message: {res.message_id}", flush=True)
 
             await context.bot.send_message(
                 chat_id=update.message.chat.id,
@@ -540,9 +540,31 @@ class lybot:
                 parse_mode="HTML"
             )
             # 发送奖励
+            user_full_name = ""
+            try:
+                user = context.bot.get_chat(chat_id=decode_row['sender_id'])
+                user_full_name = user.full_name
+            except Exception as e:
+                self.logger.error(f"Failed to get user info: {e}")
 
+            
 
+            # 发送消息到中文群
+            await context.bot.send_message(
+                chat_id=-1002086803190,
+                text=f"群友{user_full_name}分享了他的代码到<u>其他友群</u>，轻松领取了额外的五个珍贵资源！机会难得，你也赶快试试吧！",
+                parse_mode="HTML"
+            )
 
+            
+
+            # 发送消息到外文群
+            english_message_text = "New member joined via you; earned codes.\r\n\r\n"
+            await context.bot.send_message(
+                chat_id=-1002138063591,
+                text=f"Our group member, {user_full_name}, shared his code with <u>other groups</u> and easily earned five extra valuable resources! Don't miss out—give it a try now!",
+                parse_mode="HTML"
+            )
 
             
             return
@@ -740,7 +762,8 @@ class lybot:
             if dialog.unread_count > 0 and (dialog.is_user):
                 time.sleep(0.5)  # 每次请求之间等待0.5秒
                 
-                print(f">Reading messages from entity {entity.id} {entity_title} - U:{dialog.unread_count} \n", flush=True)
+                # print(f">Reading messages from entity {entity.id} {entity_title} - U:{dialog.unread_count} \n", flush=True)
+                self.logger.info(f">Reading messages from entity {entity.id} {entity_title} - U:{dialog.unread_count} \n")
 
                 async for message in client.iter_messages(entity, min_id=0, limit=50, reverse=True, filter=InputMessagesFilterEmpty()):
                     time.sleep(1)  # 每次请求之间等待0.5秒
