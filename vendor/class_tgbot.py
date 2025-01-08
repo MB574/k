@@ -347,7 +347,7 @@ class lybot:
         # 使用类内方法提取 URL
         urls = self.extract_entity_from_message(update.message, MessageEntityType.URL)
         if urls:
-
+            print(f"urls",flush=True)
             bot_name = self.bot_username
             sender_id = update.message.from_user.id
             file_type = 'u'
@@ -375,6 +375,7 @@ class lybot:
 
         # print(f"Received message: {update.message}", flush=True)
         if hasattr(update.message, 'media_group_id') and update.message.media_group_id:
+            print(f"media_group",flush=True)
             media_group_id = update.message.media_group_id
 
             # 添加消息到 Album
@@ -391,6 +392,7 @@ class lybot:
 
             # print(f"[B]media_group_id message received {update.message.media_group_id}", flush=True)
         elif update.message.photo or update.message.video or update.message.document:
+            print(f"{self.bot_username}-[B]Video message received",flush=True)
             self.logger.info(f"{self.bot_username}-[B]Video message received")
             # print(f"{self.bot_username}-[B]Video message received", flush=True)
             await self.upsert_file_info(update.message)
@@ -437,7 +439,7 @@ class lybot:
             # 检查是否为加密字符串
             
             encode_code_list = self.find_encode_code(update.message.text)
-            # print(f"Found {len(encode_code_list)} encode codes in the message.")
+            print(f"Found {len(encode_code_list)} encode codes in the message. "+update.message.text, flush=True)
             if encode_code_list:
                 for encode_code in encode_code_list:
                     try:
@@ -447,13 +449,14 @@ class lybot:
                         decode_row = self.decode(encode_code)
 
                         if decode_row['file_type'] == "wrong":
+                            print(f"[T]Wrong file type: {encode_code}")
                             await context.bot.send_message(
                                     chat_id=update.message.chat_id,
                                     text="Code invalid 代码错误。"
                                 )
                             return
                         elif decode_row['bot_name'] == self.bot_username:
-                            
+                            print(f"[T]My own code: {encode_code}")
                             # 密文转资源
                             await self.send_material_by_row(decode_row,context,reply_to_message_id,chat_id)
 
@@ -464,6 +467,7 @@ class lybot:
 
                             
                         else:
+                            print(f"[T]Other's code: {encode_code}")
                             # --- 别人的密文 => 查询自己是否有 file_id
                             # ------ 若有则回覆 => 密文转资源
                             # ------ 没有, 确认 HW_BOT 有没有, 若有则让 HWBOT 传给 ManBOT => Pool , 出现 "正在同步资源中,请一小时后再试"
@@ -506,7 +510,6 @@ class lybot:
                                             reply_to_message_id=update.message.message_id,
                                             text="Old data restoring, please try again in an hour. 旧数复原中，请一小时后再试。"
                                         )
-                                        
 
                                         await self.send_material_by_row(dyer_dict,self.dyer_application ,0, self.config['man_bot_id']) 
                                         # await self.send_material_by_row(dyer_dict,context,reply_to_message_id,chat_id)
@@ -523,14 +526,17 @@ class lybot:
                                     print(f"Not Found2")  
                                     return None
                                 # 查询是否存在 file_id
-                               
-                            
-                            
+                                
+                        #只处理第一个密文    
+                        break
+
                     except ValueError as e:
                         exc_type, exc_obj, exc_tb = sys.exc_info()
                         line_number = exc_tb.tb_lineno
                         self.logger.error(f"An exception occurred on line {line_number}: {e}")
                         # print(f"Failed to decode message: {e}")
+                
+                
         else:
             await update.message.reply_text(update.message.text)
 
@@ -805,16 +811,21 @@ class lybot:
     
     async def handle_album_completion(self,media_group_id: str, context) -> None:
         try:
+            print(f"Album {media_group_id} 处理开始", flush=True)
             # 等待超时时间
             await asyncio.sleep(self.ALBUM_TIMEOUT)
+            
             
             # 处理 Album 完成逻辑
             album_set = self.albums.pop(media_group_id, [])
             self.album_tasks.pop(media_group_id, None)
 
+            
+
             # 轮询album_set
             first_message = album_set[0]
             for message in album_set:
+                print(f"Album {media_group_id} contains message: {message.message_id}")
                 await self.upsert_file_info(message)
                 await self.insert_media_group(message)
                 await message.forward(chat_id=self.config['man_bot_id'])
