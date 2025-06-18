@@ -4,12 +4,11 @@
 import asyncio
 import json
 import time
-from peewee import PostgresqlDatabase
+from peewee import PostgresqlDatabase, Model, BigIntegerField, IntegerField
 from playhouse.pool import PooledPostgresqlDatabase
 from vendor.class_tgbot import lybot  # 导入自定义的 LYClass
 import logging
 import os
-import random
 from telegram import Update
 from telegram.ext import Application, MessageHandler, CommandHandler, filters
 
@@ -35,10 +34,14 @@ logger.addHandler(flush_handler)
 # 检查是否在本地开发环境中运行
 if not os.getenv('GITHUB_ACTIONS'):
     from dotenv import load_dotenv
-    load_dotenv()
+    load_dotenv(dotenv_path='.29614663.env')
+   
 
 
-db_port = os.getenv('DB_PORT')
+db_port = os.getenv('MYSQL_DB_PORT')
+
+
+
 
 config = {
     'api_id': os.getenv('API_ID'),
@@ -47,11 +50,11 @@ config = {
     'session_name': os.getenv('API_ID') + 'session_name',
     'bot_token': os.getenv('BOT_TOKEN'),
     'dyer_bot_token': os.getenv('DYER_BOT_TOKEN',''),
-    'db_name': os.getenv('DB_NAME'),
-    'db_user': os.getenv('DB_USER'),
-    'db_password': os.getenv('DB_PASSWORD'),
-    'db_host': os.getenv('DB_HOST'),
-    'db_port': int(db_port) if db_port and db_port.isdigit() else 5432,
+    'db_name': os.getenv('MYSQL_DB_NAME'),
+    'db_user': os.getenv('MYSQL_DB_USER'),
+    'db_password': os.getenv('MYSQL_DB_PASSWORD'),
+    'db_host': os.getenv('MYSQL_DB_HOST'),
+    'db_port': int(db_port) if db_port and db_port.isdigit() else 58736,
     'db_sslmode': os.getenv('DB_SSLMODE','require'),
     'man_bot_id': os.getenv('MAN_BOT_ID'),
     'setting_chat_id': int(os.getenv('SETTING_CHAT_ID',0)),
@@ -68,7 +71,7 @@ module_enable = {
     'man_bot': False,
     'dyer_bot': False,
     'bot': False,
-    'db': False,
+    'db': True,
 }
 
 #如果 config 存在 seesion_name, 且有值(非空), 则使用
@@ -88,27 +91,22 @@ if 'db_name' in config and config['db_name']:
 if module_enable['man_bot'] == True:
     client = TelegramClient(config['session_name'], config['api_id'], config['api_hash'])
 
-
-# 使用连接池并启用自动重连
-# if module_enable['db'] == True:
-#     db = PooledPostgresqlDatabase(
-#         config['db_name'],
-#         user=config['db_user'],
-#         password=config['db_password'],
-#         host=config['db_host'],
-#         port=config['db_port'],
-#         sslmode=config['db_sslmode'],
-#         max_connections=32,  # 最大连接数
-#         stale_timeout=300  # 5 分钟内未使用的连接将被关闭
-#     )
-# else:
-#     db = None
-
 if module_enable['db'] == True:
+    print(f"db_name: {config['db_name']}")
     from database import db
+    
 else:
     db = None
 
+
+# 定义模型
+class Pure(Model):
+    user_id = BigIntegerField(primary_key=True)
+    done = IntegerField(default=0)
+
+    class Meta:
+        database = db
+        table_name = 'pure'
 
 
 # 初始化 Bot 和 Application
@@ -171,27 +169,20 @@ async def main():
 
     
 
-
-
-
-
     
     start_time = time.time()
 
     if module_enable['man_bot'] == True:
         while True:
             await tgbot.man_bot_loop(client)
-            print(f"---Cycle End \r\n")
+            print(f"ok")
             elapsed_time = time.time() - start_time
 
             # if elapsed_time > tgbot.MAX_PROCESS_TIME:
             #     break
 
-            # 乱数决定休息 60 ~180 秒
-            # await asyncio.sleep(random.randint(55, 180))
-            # await asyncio.sleep(random.randint(15, 20))
-            await asyncio.sleep(random.randint(4, 6))
-     
+
+            await asyncio.sleep(1)
 
             if module_enable['db'] == True:
                 if not db.is_closed():
@@ -206,8 +197,34 @@ async def main():
         async with client.conversation(int(tgbot.config['setting_chat_id'])) as conv:
             await conv.send_message(config_str2, reply_to=int(tgbot.config['setting_thread_id']))
 
+# 你的 session 名称
 
+
+async def get_group_members(group_name_or_id):
+    entity = await client.get_entity(group_identifier)
+    print(f"Group found: {entity.title} (ID: {entity.id})")
+    if not db.is_closed():
+        try:
+            db.execute_sql('SELECT 1')
+        except Exception as e:
+            print(f"Error keeping pool connection alive: {e}")
+    elif db.is_closed():
+        db.connect()
+
+    async with client:
+        # 获取群成员列表
+        participants = await client.get_participants(group_name_or_id)
+
+        # 遍历输出用户名和 ID
+        for user in participants:
+            new_entry = Pure.create(user_id=user.id, done=0)
+            print(f'User ID: {user.id}, Username: {user.username}, Name: {user.first_name} {user.last_name or ""}')
+
+# 替换为你的群组 username 或 ID
+group_identifier = -1002592636499
 
 
 with client:
-    client.loop.run_until_complete(main())
+    # client.loop.run_until_complete(main())
+    client.loop.run_until_complete(get_group_members(group_identifier))
+
